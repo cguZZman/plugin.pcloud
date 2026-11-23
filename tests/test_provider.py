@@ -91,6 +91,20 @@ class PCloudProviderTest(unittest.TestCase):
         self.assertEqual(p.get_drives(), [{'id': '42', 'name': '', 'type': 'premium'}])
         self.assertEqual(p.get_drive_type_name('premium'), 'pCloud Premium')
 
+    def test_a_new_account_is_read_with_the_tokens_just_received(self):
+        # While an account is being added, the provider has no account manager: only the tokens passed in.
+        sent = []
+
+        def request_json(request):
+            sent.append((request.url, request.headers['authorization']))
+            return {'result': 0, 'userid': 7, 'email': 'new@example.com'}
+
+        with mock.patch('clouddrive.common.remote.request.Request.request_json', request_json):
+            account = PCloud().get_account(access_tokens=dict(TOKENS, date=10 ** 10))
+        self.assertEqual(account, {'id': '7', 'name': 'new@example.com'})
+        self.assertTrue(sent[0][0].startswith('https://eapi.pcloud.com/userinfo?'))
+        self.assertEqual(sent[0][1], 'Bearer AT')
+
     def test_only_pcloud_hosts_are_used(self):
         for hostname in (None, 'evil.example.com'):
             p = FakePCloud({'userinfo': {'result': 0, 'userid': 1}}, dict(TOKENS, hostname=hostname))

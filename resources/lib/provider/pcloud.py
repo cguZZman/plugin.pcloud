@@ -55,7 +55,9 @@ class PCloud(Provider):
         self.download_requires_auth = False
 
     def _get_api_url(self):
-        return 'https://' + self._host()
+        # Every call passes its full URL, with the account's host (_api): this is only the base clouddrive.common
+        # builds first. It must not read the account's tokens: while an account is being added, there is none yet.
+        return 'https://' + self._HOSTS[0]
 
     def _get_request_headers(self):
         return None
