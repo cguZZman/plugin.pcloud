@@ -48,6 +48,13 @@ class PCloud(Provider):
     _AUTH_ERRORS = (1000, 2000, 2094, 2095)
     # 2002 a component of the parent directory does not exist, 2005 directory does not exist, 2009 file not found.
     _NOT_FOUND_ERRORS = (2002, 2005, 2009)
+    # Library exports download these files from the listing's download_info (clouddrive.common's export service):
+    # .strm and .nomedia always; .nfo, and artwork pictures named like these or in these folders, with "Download
+    # artwork". Only they get a link in listings: each costs a request.
+    _EXPORT_DOWNLOADS = ('strm', 'nomedia', 'nfo')
+    _ARTWORK_NAMES = ('back', 'banner', 'characterart', 'clearart', 'clearlogo', 'discart', 'fanart', 'keyart', 'landscape', 'poster',
+                      'spine', 'thumb', 'folder', 'cover', 'animatedposter', 'animatedfanart')
+    _ARTWORK_FOLDERS = ('.actors', 'extrafanart')
 
     def __init__(self, source_mode=False):
         super(PCloud, self).__init__('pcloud', source_mode)
@@ -150,15 +157,14 @@ class PCloud(Provider):
         return self._api('listfolder', parameters)['metadata']
 
     def get_folder_items(self, item_driveid=None, item_id=None, path=None, on_items_page_completed=None, include_download_info=False, on_before_add_item=None):
-        # pCloud answers the whole folder at once. Listed files get no download_info: each link costs a request, and
-        # what plays or downloads a file asks for it again with get_item (the download service, .nfo files, exports
-        # of changes, which pCloud doesn't report).
+        # pCloud answers the whole folder at once. Listed files only get download_info when an export downloads them
+        # (_exported_download): each link costs a request, and playback asks for it with get_item.
         folder = self._list(item_id, path=path)
         if self.cancel_operation():
             return
         items = []
         for entry in Utils.get_safe_value(folder, 'contents', []):
-            item = self._extract_item(entry)
+            item = self._extract_item(entry, include_download_info and self._exported_download(entry, folder))
             if on_before_add_item:
                 on_before_add_item(item)
             items.append(item)
@@ -212,6 +218,15 @@ class PCloud(Provider):
             item['download_info'] = {'url': self._file_link(entry['id'])}
         return item
 
+    def _exported_download(self, entry, folder):
+        if Utils.get_safe_value(entry, 'isfolder'):
+            return False
+        name = Utils.get_safe_value(entry, 'name', '').lower()
+        extension = Utils.get_extension(name)
+        if extension in self._EXPORT_DOWNLOADS:
+            return True
+        return extension in ('jpg', 'png') and (any(n in name for n in self._ARTWORK_NAMES) or Utils.get_safe_value(folder, 'name') in self._ARTWORK_FOLDERS)
+
     def _file_link(self, item_id):
         # A pre-authenticated link to the file on one of pCloud's content servers. It expires after a few hours; the
         # download service asks for it again after a few minutes.
@@ -226,8 +241,8 @@ class PCloud(Provider):
 
         def add(folder):
             children = Utils.get_safe_value(folder, 'contents', [])
-            # Files first, as each folder's own listing would, then folders. No download_info (see get_folder_items).
-            tree[folder['id']] = [self._extract_item(child) for child in children if not Utils.get_safe_value(child, 'isfolder')] + \
+            # Files first, then folders. Only the files an export downloads get download_info (see get_folder_items).
+            tree[folder['id']] = [self._extract_item(child, self._exported_download(child, folder)) for child in children if not Utils.get_safe_value(child, 'isfolder')] + \
                 [self._extract_item(child) for child in children if Utils.get_safe_value(child, 'isfolder')]
             for child in children:
                 if Utils.get_safe_value(child, 'isfolder') and 'contents' in child:

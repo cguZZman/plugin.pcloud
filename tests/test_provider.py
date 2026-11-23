@@ -135,6 +135,22 @@ class PCloudProviderTest(unittest.TestCase):
         self.assertNotIn('download_info', movie)
         self.assertEqual([c[2] for c in p.calls], ['listfolder'])
 
+    def test_exports_get_links_for_the_files_they_download(self):
+        # The export service downloads .strm/.nomedia/.nfo and artwork from the listing's download_info.
+        tree_answer = folder(5, 'Movies', 0, [file(51, 'Movie.mkv', 5), file(52, 'Movie.nfo', 5), file(53, 'Movie-poster.jpg', 5),
+                                              file(54, 'Holiday.jpg', 5), folder(6, 'extrafanart', 5, [file(61, 'a.jpg', 6)])])
+        links = {('getfilelink', fid): {'result': 0, 'hosts': ['c.pcloud.com'], 'path': '/%s' % fid} for fid in ('51', '52', '53', '54', '61')}
+        p = FakePCloud(dict(list(links.items()) + [(('listfolder', '5'), {'result': 0, 'metadata': tree_answer})]))
+        tree = p.list_subtree('42', 'd5')
+        with_link = sorted(i['id'] for items in tree.values() for i in items if 'download_info' in i)
+        self.assertEqual(with_link, ['f52', 'f53', 'f61'])
+        self.assertEqual([c[3]['fileid'] for c in p.calls if c[2] == 'getfilelink'], ['52', '53', '61'])
+        p = FakePCloud(dict(list(links.items()) + [(('listfolder', '5'), {'result': 0, 'metadata': tree_answer})]))
+        listed = p.get_folder_items(item_id='d5', include_download_info=True)
+        self.assertEqual(sorted(i['id'] for i in listed if 'download_info' in i), ['f52', 'f53'])
+        p = FakePCloud({('listfolder', '5'): {'result': 0, 'metadata': tree_answer}})
+        self.assertFalse(any('download_info' in i for i in p.get_folder_items(item_id='d5')))
+
     def test_a_file_plays_from_a_pre_authenticated_link(self):
         p = FakePCloud({('stat', '51'): {'result': 0, 'metadata': MOVIES['contents'][0]},
                         ('getfilelink', '51'): {'result': 0, 'hosts': ['c1.pcloud.com', 'c2.pcloud.com'], 'path': '/dl/abc/Movie.mkv'}})
