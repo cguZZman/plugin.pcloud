@@ -49,7 +49,7 @@ Entre na conta pelo celular ou computador com um código curto mostrado no Kodi.
 			<icon>icon.png</icon>
 			<fanart>fanart.jpg</fanart>
 		</assets>
-		<news>v1.0.0:
+		<news>v1.0.0 released Nov 23, 2026:
 - First version: browse, search and play your pCloud files, US and Europe accounts
 - Requires clouddrive.common 1.5.21</news>
 	</extension>
